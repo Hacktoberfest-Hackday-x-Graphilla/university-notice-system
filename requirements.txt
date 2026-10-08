@@ -1,0 +1,5 @@
+# Run the chatbot: Flask + Google AI Studio (Gemma) + PyMuPDF.
+flask
+google-genai
+python-dotenv
+pymupdf

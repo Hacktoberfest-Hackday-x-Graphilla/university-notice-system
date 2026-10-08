@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notice Chat</title>
+  <style>
+    :root { --ink: #1f2933; --muted: #6b7280; --accent: #2563eb; --bg: #f8fafc; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg); color: var(--ink); display: flex; flex-direction: column;
+      height: 100vh; max-width: 760px; margin: 0 auto; padding: 12px;
+    }
+    header h1 { margin: 0 0 4px; font-size: 1.25rem; }
+    header p { margin: 0 0 12px; color: var(--muted); font-size: 0.9rem; }
+    .upload { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .upload input[type="file"] { max-width: 260px; }
+    .upload .status { color: var(--muted); font-size: 0.85rem; flex: 1; min-width: 180px; }
+    button {
+      background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+      padding: 8px 14px; font-size: 0.9rem; cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: default; }
+    #chat {
+      flex: 1; overflow-y: auto; margin: 14px 0; padding: 10px;
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; }
+    .user { align-self: flex-end; background: var(--accent); color: #fff; }
+    .bot { align-self: flex-start; background: #f1f5f9; }
+    .sources { display: block; margin-top: 6px; font-size: 0.75rem; color: var(--muted); }
+    footer { display: flex; gap: 8px; }
+    footer input {
+      flex: 1; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Notice Chat</h1>
+    <p>Upload notice PDFs, then ask questions about them. Answers come only from what you uploaded.</p>
+    <div class="upload">
+      <input type="file" id="file" accept=".pdf">
+      <button id="uploadBtn">Upload</button>
+      <span class="status" id="uploadStatus"></span>
+    </div>
+  </header>
+
+  <main id="chat"></main>
+
+  <footer>
+    <input id="question" placeholder="Ask about the uploaded notices..." autocomplete="off">
+    <button id="sendBtn">Send</button>
+  </footer>
+
+  <script>
+    const chat = document.getElementById("chat");
+    const uploadStatus = document.getElementById("uploadStatus");
+
+    function addMsg(text, who) {
+      const div = document.createElement("div");
+      div.className = "msg " + who;
+      div.textContent = text; // textContent, never innerHTML, so text stays safe
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+      return div;
+    }
+
+    async function uploadFile() {
+      const input = document.getElementById("file");
+      const file = input.files && input.files[0];
+      if (!file) { uploadStatus.textContent = "Pick a PDF first."; return; }
+      const form = new FormData();
+      form.append("file", file);
+      uploadStatus.textContent = "Uploading " + file.name + " ...";
+      try {
+        const res = await fetch("/api/upload", { method: "POST", body: form });
+        const data = await res.json();
+        if (!data.ok) {
+          uploadStatus.textContent = "Error: " + (data.error || "upload failed");
+        } else {
+          uploadStatus.textContent =
+            "Stored " + data.file + " (" + data.chunks + " chunks). " +
+            "Files now: " + data.files.join(", ");
+        }
+      } catch (err) {
+        uploadStatus.textContent = "Error: " + err;
+      }
+    }
+
+    async function send() {
+      const input = document.getElementById("question");
+      const message = input.value.trim();
+      if (!message) return;
+      input.value = "";
+      addMsg(message, "user");
+      const bubble = addMsg("Thinking...", "bot");
+      try {
+        const res = await fetch("/api/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message })
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          bubble.textContent = "Error: " + (data.error || "request failed");
+        } else {
+          bubble.textContent = data.answer;
+          if (data.sources && data.sources.length) {
+            const src = document.createElement("span");
+            src.className = "sources";
+            src.textContent = "From: " + data.sources.join(", ");
+            bubble.appendChild(src);
+          }
+        }
+      } catch (err) {
+        bubble.textContent = "Error: " + err;
+      }
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    document.getElementById("uploadBtn").addEventListener("click", uploadFile);
+    document.getElementById("sendBtn").addEventListener("click", send);
+    document.getElementById("question").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") send();
+    });
+
+    addMsg("Hello! Upload a notice PDF above, then ask me something about it.", "bot");
+  </script>
+</body>
+</html>
