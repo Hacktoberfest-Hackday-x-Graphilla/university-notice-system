@@ -7,6 +7,10 @@ from them — no training, no internet knowledge, no hallucinating beyond the do
 
 **Status: just started.** The basic chatbot works; contributors make it better.
 
+## Screenshot
+
+![Notice Chat - the public chat page](screenshots/chat.png)
+
 ## Try it
 
 ```bash
