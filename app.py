@@ -4,8 +4,11 @@
 
 then open http://127.0.0.1:5000 in your browser.
 
+Pages:
+  GET  /               the public chatbot page (open to everyone)
+  GET  /admin          the admin page (upload + reset documents)
+
 Endpoints:
-  GET  /               the chat page
   POST /api/upload     upload a notice PDF (ADMIN ONLY - X-Admin-Password header)
   GET  /api/files      list the files already uploaded (open)
   POST /api/reset      forget every uploaded document (ADMIN ONLY)
@@ -39,6 +42,11 @@ def is_admin() -> bool:
 @app.get("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")
+
+
+@app.get("/admin")
+def admin():
+    return send_from_directory(app.static_folder, "admin.html")
 
 
 @app.post("/api/upload")

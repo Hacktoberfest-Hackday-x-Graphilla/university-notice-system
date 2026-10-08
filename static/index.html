@@ -14,10 +14,7 @@
     }
     header h1 { margin: 0 0 4px; font-size: 1.25rem; }
     header p { margin: 0 0 12px; color: var(--muted); font-size: 0.9rem; }
-    .upload { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .upload input[type="file"] { max-width: 260px; }
-    .upload input[type="password"] { max-width: 150px; }
-    .upload .status { color: var(--muted); font-size: 0.85rem; flex: 1; min-width: 180px; }
+    header a { color: var(--accent); }
     button {
       background: var(--accent); color: #fff; border: 0; border-radius: 8px;
       padding: 8px 14px; font-size: 0.9rem; cursor: pointer;
@@ -42,13 +39,7 @@
 <body>
   <header>
     <h1>Notice Chat</h1>
-    <p>Upload notice PDFs (admin only), then ask questions about them. Answers come only from what you uploaded.</p>
-    <div class="upload">
-      <input type="file" id="file" accept=".pdf">
-      <input type="password" id="adminKey" placeholder="Admin password" autocomplete="off">
-      <button id="uploadBtn">Upload</button>
-      <span class="status" id="uploadStatus"></span>
-    </div>
+    <p>Ask questions about the uploaded notices — answers come only from those documents. <a href="/admin">Upload documents (admin)</a></p>
   </header>
 
   <main id="chat"></main>
@@ -60,7 +51,6 @@
 
   <script>
     const chat = document.getElementById("chat");
-    const uploadStatus = document.getElementById("uploadStatus");
 
     function addMsg(text, who) {
       const div = document.createElement("div");
@@ -69,35 +59,6 @@
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
       return div;
-    }
-
-    async function uploadFile() {
-      const input = document.getElementById("file");
-      const file = input.files && input.files[0];
-      if (!file) { uploadStatus.textContent = "Pick a PDF first."; return; }
-      const password = document.getElementById("adminKey").value;
-      const form = new FormData();
-      form.append("file", file);
-      uploadStatus.textContent = "Uploading " + file.name + " ...";
-      try {
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          body: form,
-          headers: { "X-Admin-Password": password }
-        });
-        const data = await res.json();
-        if (res.status === 401) {
-          uploadStatus.textContent = "Wrong or missing admin password.";
-        } else if (!data.ok) {
-          uploadStatus.textContent = "Error: " + (data.error || "upload failed");
-        } else {
-          uploadStatus.textContent =
-            "Stored " + data.file + " (" + data.chunks + " chunks). " +
-            "Files now: " + data.files.join(", ");
-        }
-      } catch (err) {
-        uploadStatus.textContent = "Error: " + err;
-      }
     }
 
     async function send() {
@@ -131,13 +92,12 @@
       chat.scrollTop = chat.scrollHeight;
     }
 
-    document.getElementById("uploadBtn").addEventListener("click", uploadFile);
     document.getElementById("sendBtn").addEventListener("click", send);
     document.getElementById("question").addEventListener("keydown", (e) => {
       if (e.key === "Enter") send();
     });
 
-    addMsg("Hello! Upload a notice PDF above, then ask me something about it.", "bot");
+    addMsg("Hello! Ask me anything about the uploaded notices.", "bot");
   </script>
 </body>
 </html>

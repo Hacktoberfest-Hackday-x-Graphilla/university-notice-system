@@ -43,6 +43,15 @@ class AdminGateTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         response.close()  # close the streamed file so no ResourceWarning
 
+    def test_admin_page_is_open(self):
+        response = self.client.get("/admin")
+        self.assertEqual(response.status_code, 200)
+        response.close()
+
+    def test_public_page_has_no_upload_box(self):
+        response = self.client.get("/")
+        self.assertNotIn(b"adminKey", response.get_data())
+
     def test_ask_is_open_without_admin(self):
         response = self.client.post("/api/ask", json={"message": "hi"})
         self.assertEqual(response.status_code, 200)

@@ -21,14 +21,20 @@ password to be. `.env` is gitignored, so it never leaves your machine.
 python app.py
 ```
 
-Open http://127.0.0.1:5000 — enter the **admin password** (the one in your
-`.env`) next to the upload button and upload a notice PDF (try
-[`examples/sample-notice.pdf`](examples/sample-notice.pdf)), then ask
-something like *"What time does the office open?"*
+Open two pages:
 
-**Who can do what:** upload and reset are **admin-only** (they need the
-`ADMIN_PASSWORD` from `.env`). Asking questions is open to everyone — no
-password needed.
+- **http://127.0.0.1:5000/** — the public chatbot. Ask anything, no password.
+- **http://127.0.0.1:5000/admin** — the admin page. Enter the **admin
+  password** (from `ADMIN_PASSWORD` in your `.env`), upload a notice PDF
+  (try [`examples/sample-notice.pdf`](examples/sample-notice.pdf)), or
+  forget all documents.
+
+Then go back to the chat and ask something like *"What time does the office
+open?"*
+
+**Who can do what:** uploading and resetting happen on `/admin` and need
+the `ADMIN_PASSWORD` from `.env`. Asking questions on `/` is open to
+everyone — no password needed.
 
 ## How it works (in one line each)
 
@@ -36,7 +42,8 @@ password needed.
 |---|---|
 | `app.py` | the web server + endpoints; upload is admin-only, asking is open (the **backend**) |
 | `rag.py` | turns PDFs into chunks, finds the relevant ones, asks the model |
-| `static/index.html` | the chat page (the **frontend**) |
+| `static/index.html` | the public chat page (the **frontend**) |
+| `static/admin.html` | the admin page: upload + reset documents |
 | `data/` | local storage for uploads + the index (created on first run, gitignored) |
 
 Flow: upload → PDF text is split into chunks → your question picks the few
@@ -66,7 +73,8 @@ Stuck? Post in **Discussions** — no question is dumb.
 ```text
 app.py                  backend (endpoints, uploads, asks)
 rag.py                  retrieval + answer logic
-static/index.html       frontend (chat page, no build step)
+static/index.html       frontend - public chat page
+static/admin.html       frontend - admin upload page
 examples/               sample notice PDF to try
 data/                   uploads + index (gitignored, created at runtime)
 tests/                  tests (no installs beyond pytest-compatible unittest)
