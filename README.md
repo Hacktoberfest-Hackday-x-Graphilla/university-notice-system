@@ -14,21 +14,27 @@ pip install -r requirements.txt
 ```
 
 Copy `.env.example` to `.env` and put your Google AI Studio API key in
-`GEMINI_API_KEY`. `.env` is gitignored, so the key never leaves your machine.
+`GEMINI_API_KEY`, and set `ADMIN_PASSWORD` to whatever you want the upload
+password to be. `.env` is gitignored, so it never leaves your machine.
 
 ```bash
 python app.py
 ```
 
-Open http://127.0.0.1:5000 — upload a notice PDF (try
+Open http://127.0.0.1:5000 — enter the **admin password** (the one in your
+`.env`) next to the upload button and upload a notice PDF (try
 [`examples/sample-notice.pdf`](examples/sample-notice.pdf)), then ask
 something like *"What time does the office open?"*
+
+**Who can do what:** upload and reset are **admin-only** (they need the
+`ADMIN_PASSWORD` from `.env`). Asking questions is open to everyone — no
+password needed.
 
 ## How it works (in one line each)
 
 | File | Job |
 |---|---|
-| `app.py` | the web server + endpoints (the **backend**) |
+| `app.py` | the web server + endpoints; upload is admin-only, asking is open (the **backend**) |
 | `rag.py` | turns PDFs into chunks, finds the relevant ones, asks the model |
 | `static/index.html` | the chat page (the **frontend**) |
 | `data/` | local storage for uploads + the index (created on first run, gitignored) |

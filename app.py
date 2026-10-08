@@ -6,12 +6,14 @@ then open http://127.0.0.1:5000 in your browser.
 
 Endpoints:
   GET  /               the chat page
-  POST /api/upload     upload a notice PDF (multipart field: file)
-  GET  /api/files      list the files already uploaded
-  POST /api/reset      forget every uploaded document
-  POST /api/ask        ask a question (JSON: {"message": "..."})
+  POST /api/upload     upload a notice PDF (ADMIN ONLY - X-Admin-Password header)
+  GET  /api/files      list the files already uploaded (open)
+  POST /api/reset      forget every uploaded document (ADMIN ONLY)
+  POST /api/ask        ask a question (open to everyone; JSON: {"message": "..."})
 """
 
+import hmac
+import os
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -23,6 +25,17 @@ app = Flask(__name__, static_folder="static", static_url_path="")
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB per file
 
 
+def is_admin() -> bool:
+    """The upload + reset endpoints are admin-only.
+
+    The admin password lives in .env (ADMIN_PASSWORD). The frontend sends it
+    in the 'X-Admin-Password' header. Asking questions needs NO admin access.
+    """
+    password = os.environ.get("ADMIN_PASSWORD", "") or ""
+    provided = request.headers.get("X-Admin-Password", "") or ""
+    return bool(password) and hmac.compare_digest(provided, password)
+
+
 @app.get("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")
@@ -30,6 +43,8 @@ def index():
 
 @app.post("/api/upload")
 def upload():
+    if not is_admin():
+        return jsonify({"ok": False, "error": "admin password required"}), 401
     file = request.files.get("file")
     if not file or not file.filename:
         return jsonify({"ok": False, "error": "no file selected"}), 400
@@ -54,6 +69,8 @@ def files():
 
 @app.post("/api/reset")
 def reset():
+    if not is_admin():
+        return jsonify({"ok": False, "error": "admin password required"}), 401
     rag.forget_all()
     return jsonify({"ok": True, "files": []})
 

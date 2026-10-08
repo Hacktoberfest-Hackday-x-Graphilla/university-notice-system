@@ -16,6 +16,7 @@
     header p { margin: 0 0 12px; color: var(--muted); font-size: 0.9rem; }
     .upload { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .upload input[type="file"] { max-width: 260px; }
+    .upload input[type="password"] { max-width: 150px; }
     .upload .status { color: var(--muted); font-size: 0.85rem; flex: 1; min-width: 180px; }
     button {
       background: var(--accent); color: #fff; border: 0; border-radius: 8px;
@@ -41,9 +42,10 @@
 <body>
   <header>
     <h1>Notice Chat</h1>
-    <p>Upload notice PDFs, then ask questions about them. Answers come only from what you uploaded.</p>
+    <p>Upload notice PDFs (admin only), then ask questions about them. Answers come only from what you uploaded.</p>
     <div class="upload">
       <input type="file" id="file" accept=".pdf">
+      <input type="password" id="adminKey" placeholder="Admin password" autocomplete="off">
       <button id="uploadBtn">Upload</button>
       <span class="status" id="uploadStatus"></span>
     </div>
@@ -73,13 +75,20 @@
       const input = document.getElementById("file");
       const file = input.files && input.files[0];
       if (!file) { uploadStatus.textContent = "Pick a PDF first."; return; }
+      const password = document.getElementById("adminKey").value;
       const form = new FormData();
       form.append("file", file);
       uploadStatus.textContent = "Uploading " + file.name + " ...";
       try {
-        const res = await fetch("/api/upload", { method: "POST", body: form });
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: form,
+          headers: { "X-Admin-Password": password }
+        });
         const data = await res.json();
-        if (!data.ok) {
+        if (res.status === 401) {
+          uploadStatus.textContent = "Wrong or missing admin password.";
+        } else if (!data.ok) {
           uploadStatus.textContent = "Error: " + (data.error || "upload failed");
         } else {
           uploadStatus.textContent =
