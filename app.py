@@ -4,6 +4,10 @@
 
 then open http://127.0.0.1:5000 in your browser.
 
+Run `python app.py` to start. Want live code-reload while editing? Start it with
+`FLASK_DEBUG=1 python app.py` instead (reloader off by default so uploads are
+never interrupted by a mid-request restart).
+
 Pages:
   GET  /               the public chatbot page (open to everyone)
   GET  /admin          the admin page (upload + reset documents)
@@ -97,4 +101,6 @@ def ask():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    # Reloader off by default: on this machine it restarts mid-request (and
+    # aborts uploads). Set FLASK_DEBUG=1 to get auto-reload while editing.
+    app.run(host="127.0.0.1", port=5000, debug=os.environ.get("FLASK_DEBUG") == "1")

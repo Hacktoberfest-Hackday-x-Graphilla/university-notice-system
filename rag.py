@@ -4,7 +4,8 @@ Kept separate from app.py so the logic can be tested without a web server,
 and so a contributor can improve retrieval/answers without touching Flask.
 
 How it works:
-  upload -> extract text -> split into chunks -> saved in data/index.json
+  upload -> read the text (embedded text layer, or a Gemma vision pass
+            for scanned PDFs) -> split into chunks -> saved in data/index.json
   question -> pick the few most relevant chunks (simple word match)
            -> send them + the question to a Google AI Studio model (Gemma)
            -> return the answer and which files it came from.
@@ -32,6 +33,11 @@ MAX_CHUNK_CHARS = 900
 CHUNK_OVERLAP = 100
 TOP_K = 4
 MIN_TEXT_CHARS = 30  # below this a PDF counts as scanned / unreadable
+
+# Vision fallback (scanned PDFs): render pages and let the model read them.
+VISION_DPI = 200
+VISION_MAX_PAGES = 3
+MAX_RENDER_PIXELS = 30_000_000
 
 # Small words that don't help pick relevant chunks.
 STOPWORDS = {
@@ -74,19 +80,77 @@ def list_sources() -> list:
 # PDF -> text -> chunks
 # ---------------------------------------------------------------------------
 def extract_pdf_text(path: Path) -> str:
-    """Read a PDF's text layer. Raises ValueError for scanned/image-only PDFs."""
+    """Read a PDF's embedded text layer. May be empty/short for scanned PDFs."""
     import pymupdf as fitz
 
     doc = fitz.open(path)
     try:
-        text = "\n".join(page.get_text("text") for page in doc)
-        if len(re.sub(r"\s", "", text)) < MIN_TEXT_CHARS:
-            raise ValueError(
-                "no readable text in this PDF (scanned PDFs are not supported yet)"
-            )
-        return text
+        return "\n".join(page.get_text("text") for page in doc)
     finally:
         doc.close()
+
+
+def render_pdf_pages(path: Path) -> list:
+    """Render pages of a scanned PDF as PNG bytes for the model (vision)."""
+    import pymupdf as fitz
+
+    doc = fitz.open(path)
+    try:
+        pages = []
+        for page in list(doc)[:VISION_MAX_PAGES]:
+            width = max(page.rect.width, 1) * (VISION_DPI / 72)
+            height = max(page.rect.height, 1) * (VISION_DPI / 72)
+            scale = 1.0
+            if width * height > MAX_RENDER_PIXELS:  # keep huge pages within limits
+                scale = (MAX_RENDER_PIXELS / (width * height)) ** 0.5
+            pix = page.get_pixmap(
+                matrix=fitz.Matrix(VISION_DPI / 72 * scale, VISION_DPI / 72 * scale)
+            )
+            pages.append(pix.tobytes("png"))
+        return pages
+    finally:
+        doc.close()
+
+
+def transcribe_pages(pages: list) -> str:
+    """Ask the model to read page images and return the text they contain."""
+    from google.genai import types
+
+    client = _client()
+    parts = [types.Part.from_bytes(data=png, mime_type="image/png") for png in pages]
+    prompt = (
+        "Transcribe all the text on these document pages exactly as written. "
+        "Keep the paragraphs and numbers as they appear. "
+        "Write only the transcribed text, with no commentary."
+    )
+    response = client.models.generate_content(model=MODEL, contents=[*parts, prompt])
+    return (response.text or "").strip()
+
+
+def readable_text(text: str) -> bool:
+    """Enough non-space characters to be useful as a real document."""
+    return len(re.sub(r"\s", "", text)) >= MIN_TEXT_CHARS
+
+
+def get_document_text(path: Path) -> str:
+    """Best-effort reading: embedded text layer first, vision fallback for scans.
+
+    Scanned (image-only) PDFs have no text layer, so we render the pages and
+    let the model transcribe them. Raises ValueError if nothing can be read.
+    """
+    text = extract_pdf_text(path)
+    if readable_text(text):
+        return text
+    pages = render_pdf_pages(path)
+    if not pages:
+        raise ValueError("could not read this PDF (no text layer and no pages)")
+    transcription = transcribe_pages(pages)
+    if not readable_text(transcription):
+        raise ValueError(
+            "could not read this PDF - the vision pass returned no usable text "
+            "(check GEMINI_API_KEY and try again)"
+        )
+    return transcription
 
 
 def chunk_text(text: str, size: int = MAX_CHUNK_CHARS, overlap: int = CHUNK_OVERLAP) -> list:
@@ -119,7 +183,7 @@ def index_document(path: Path) -> int:
     if path.suffix.lower() != ".pdf":
         raise ValueError("only PDF files are supported")
     chunks = load_index()
-    pieces = chunk_text(extract_pdf_text(path))
+    pieces = chunk_text(get_document_text(path))
     for piece in pieces:
         chunks.append({"source": path.name, "text": piece})
     save_index(chunks)
@@ -129,8 +193,15 @@ def index_document(path: Path) -> int:
 # ---------------------------------------------------------------------------
 # Find relevant chunks + answer
 # ---------------------------------------------------------------------------
+# Tokens: ASCII words + Devanagari letters/marks (Nepali notices are common).
+# Without the Devanagari block, Nepali words like 'सूचना' would split on
+# combining marks and never match a query.
+DEVANAGARI = "\u0900-\u097F"
+TOKEN_RE = re.compile(r"[a-z0-9_" + DEVANAGARI + r"]+")
+
+
 def _tokens(text: str) -> list:
-    words = re.findall(r"[a-z0-9]+", text.lower())
+    words = TOKEN_RE.findall(text.lower())
     return [w for w in words if w not in STOPWORDS and len(w) > 1]
 
 
@@ -145,8 +216,13 @@ def retrieve(query: str, top_k: int = TOP_K) -> list:
         hits = sum(1 for w in words if w in hay)
         if hits:
             scored.append((hits, chunk))
-    scored.sort(key=lambda pair: (-pair[0], len(pair[1]["text"])))
-    return [chunk for _, chunk in scored[:top_k]]
+    if scored:
+        scored.sort(key=lambda pair: (-pair[0], len(pair[1]["text"])))
+        return [chunk for _, chunk in scored[:top_k]]
+    # Nothing matched (e.g. the question is in a different language than the
+    # documents). Fall back to the most recently uploaded chunks so the model
+    # still has real material to read instead of answering from nothing.
+    return load_index()[-top_k:][::-1]
 
 
 def _client():

@@ -21,6 +21,9 @@ password to be. `.env` is gitignored, so it never leaves your machine.
 python app.py
 ```
 
+(Optional: `FLASK_DEBUG=1 python app.py` for auto-reload while editing —
+off by default so a mid-request reload can never interrupt an upload.)
+
 Open two pages:
 
 - **http://127.0.0.1:5000/** — the public chatbot. Ask anything, no password.
@@ -50,9 +53,10 @@ Flow: upload → PDF text is split into chunks → your question picks the few
 most relevant chunks (simple word match) → a Gemma model answers using only
 those chunks + name of the file it came from.
 
-Only PDFs with a text layer are read for now (scanned/image-only PDFs are a
-known limitation). Uploads and the index live in your local `data/` folder —
-nothing personal is committed.
+Scans work too: if a PDF has no readable text layer, its pages are rendered
+and the model transcribes them by vision (one model call per scanned PDF,
+about 20–60s), then chunking continues as normal. Uploads and the index live
+in your local `data/` folder — nothing personal is committed.
 
 ## Contribute — 3 steps, no pressure
 
@@ -62,7 +66,7 @@ nothing personal is committed.
 
 Frontend ideas: nicer chat UI, edit/reset buttons, drag-and-drop upload,
 showing which file each answer came from. Backend ideas: better retrieval
-(semantic search), support scanned PDFs, a `/api/delete` endpoint. Not a
+(semantic search), upload several PDFs at once, a `/api/delete` endpoint. Not a
 coder? You can still file issues, test the chat on your own notices, and
 improve the docs.
 
